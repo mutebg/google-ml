@@ -8,43 +8,13 @@ const cloudConfig = {
 };
 const vision = require("@google-cloud/vision")(cloudConfig);
 const language = require("@google-cloud/language")(cloudConfig);
-const Twitter = require("twitter");
-const twitterClient = new Twitter(config);
-
-async function userTwits(name) {
-  return await twitterClient.get("statuses/user_timeline", {
-    screen_name: name,
-    count: 10
-  });
-}
-
-const propText = R.prop("text");
-
-const propEntities = R.prop("entities");
-
-const propHashTags = R.prop("hashtags");
-
-const propMedia = R.propOr("", "media");
-
-const propMediURL = R.prop("media_url");
-
-const takeHashTags = R.pipe(propEntities, propHashTags, R.map(propText));
-
-const takeImage = R.pipe(propEntities, propMedia, R.head, propMediURL);
-
-const concatText = R.pipe(R.map(propText), R.join(" "));
+const cheerio = require("cheerio");
+const fetch = require("node-fetch");
 
 const createDocument = textToAnalyze =>
   language.document(textToAnalyze, {
     language: "en"
   });
-
-// twit -> text
-const transformTwit = twit => ({
-  text: propText(twit),
-  hashtags: takeHashTags(twit),
-  image: takeImage(twit)
-});
 
 async function annotateText(document) {
   return await document.annotate({
@@ -54,17 +24,7 @@ async function annotateText(document) {
   });
 }
 
-app.get("/", async (req, res) => {
-  const response = R.map(transformTwit, await userTwits("mutebg"));
-
-  const analizedText = await R.pipe(concatText, createDocument, annotateText)(
-    response
-  );
-  res.json(analizedText);
-});
-
-app.get("/face", async (req, res) => {
-  const imgUrl = "./faces.jpg";
+async function visionImage(imgUrl) {
   const types = [
     "document", // find text on the image
     "faces", // find facec on the image
@@ -72,10 +32,32 @@ app.get("/face", async (req, res) => {
     "labels", // tags
     "properties" //  colors of the image
   ];
+  return await vision.detect(imgUrl, types);
+}
+
+app.get("/medium", async (req, res) => {
   try {
-    const response = await vision.detect(imgUrl, types);
-    res.json(response);
+    const url =
+      "https://medium.com/@mutebg/improve-your-javascript-code-quality-with-the-right-tools-aafb5db2acf7";
+    const response = await fetch(url);
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const $content = $(".postArticle-content");
+    const text = $content.text();
+    var imgs = [];
+    $content.find("img").each(function(i, elem) {
+      imgs[i] = $(this).attr("src");
+    });
+
+    const vision = await Promise.all(
+      imgs.map(async (src, _) => await visionImage(src))
+    );
+
+    //const analizedText = await R.pipe(createDocument, annotateText)(text);
+
+    res.json({ text, vision });
   } catch (error) {
+    console.log(error);
     res.json(error);
   }
 });
