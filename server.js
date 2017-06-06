@@ -17,11 +17,13 @@ const createDocument = textToAnalyze =>
   });
 
 async function annotateText(document) {
-  return await document.annotate({
-    entities: true,
-    sentiment: true,
-    sentences: true
-  });
+  return await document.annotate(
+    {
+      // entities: true,
+      // sentiment: true,
+      // sentences: true
+    }
+  );
 }
 
 async function visionImage(imgUrl) {
@@ -37,25 +39,36 @@ async function visionImage(imgUrl) {
 
 app.get("/medium", async (req, res) => {
   try {
-    const url =
-      "https://medium.com/@mutebg/improve-your-javascript-code-quality-with-the-right-tools-aafb5db2acf7";
+    const checkText = !!req.query.text;
+    const checkImg = !!req.query.img;
+    const url = req.query.url;
     const response = await fetch(url);
     const html = await response.text();
     const $ = cheerio.load(html);
     const $content = $(".postArticle-content");
-    const text = $content.text();
-    var imgs = [];
-    $content.find("img").each(function(i, elem) {
-      imgs[i] = $(this).attr("src");
-    });
+    const json = {};
 
-    const vision = await Promise.all(
-      imgs.map(async (src, _) => await visionImage(src))
-    );
+    if (checkImg) {
+      let imgs = [];
+      $content.find("img").each(function(i, elem) {
+        imgs[i] = $(this).attr("src");
+      });
+      const visionPromisses = Promise.all(
+        imgs.map(async (src, _) => await visionImage(src))
+      );
+      const visionResponse = await visionPromisses;
+      const vision = visionResponse.map(R.head);
+      json["imgs"] = vision;
+    }
 
-    //const analizedText = await R.pipe(createDocument, annotateText)(text);
+    if (checkText) {
+      const text = $content.text();
+      const analizedTextPromise = R.pipe(createDocument, annotateText)(text);
+      const [analizedText] = await analizedTextPromise;
+      json["text"] = analizedText;
+    }
 
-    res.json({ text, vision });
+    res.json(json);
   } catch (error) {
     console.log(error);
     res.json(error);
