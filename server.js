@@ -16,26 +16,23 @@ const createDocument = textToAnalyze =>
     language: "en"
   });
 
-async function annotateText(document) {
-  return await document.annotate(
+const annotateText = document =>
+  document.annotate(
     {
       // entities: true,
       // sentiment: true,
       // sentences: true
     }
   );
-}
 
-async function visionImage(imgUrl) {
-  const types = [
+const visionImage = imgUrl =>
+  vision.detect(imgUrl, [
     "document", // find text on the image
     "faces", // find facec on the image
     "landmarks",
     "labels", // tags
     "properties" //  colors of the image
-  ];
-  return await vision.detect(imgUrl, types);
-}
+  ]);
 
 app.get("/medium", async (req, res) => {
   try {
